@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rockfall Risk Detection System</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <style>
+    body {
+      background-color: #121212;
+      color: #f1f1f1;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    #map {
+      height: 75vh;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .card {
+      background: #1e1e1e;
+      border: none;
+      color: #f1f1f1;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .alert-banner {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      padding: 15px 20px;
+      background: #d32f2f;
+      color: white;
+      font-weight: bold;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+      animation: slidein 0.4s ease;
+    }
+    @keyframes slidein {
+      from { transform: translateY(-50px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <nav class="navbar navbar-dark bg-dark mb-3">
+    <div class="container-fluid">
+      <span class="navbar-brand mb-0 h1">🪨 Rockfall Risk Detection System</span>
+    </div>
+  </nav>
+
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Left panel: Controls + Metrics -->
+      <div class="col-md-3 mb-3">
+        <div class="card p-3 mb-3">
+          <h5>Rainfall Input (mm)</h5>
+          <input id="rain" type="range" class="form-range" min="0" max="200" value="0" />
+          <span id="rainval">0 mm</span>
+        </div>
+
+        <div class="card p-3">
+          <h5>Risk Metrics</h5>
+          <p>Max Risk: <span id="maxRisk">-</span></p>
+          <p>Mean Risk: <span id="meanRisk">-</span></p>
+        </div>
+      </div>
+
+      <!-- Right panel: Map -->
+      <div class="col-md-9">
+        <div id="map"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="text-center mt-3 text-muted">
+    <p style="font-size: 0.9em;">Prototype for SIH — Not for operational use</p>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const backend = "http://127.0.0.1:5000";
+    let map, overlay;
+
+    // Initialize map
+    fetch(backend + "/bounds").then(r => r.json()).then(b => {
+      const bounds = [[b.south, b.west], [b.north, b.east]];
+      const center = [(b.south + b.north) / 2, (b.west + b.east) / 2];
+
+      map = L.map('map').setView(center, 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '© OpenStreetMap'
+      }).addTo(map);
+
+      function update(rain){
+        const url = backend + `/risk_map.png?rain=${rain}&_=${Date.now()}`;
+        if(overlay) map.removeLayer(overlay);
+        overlay = L.imageOverlay(url, bounds).addTo(map);
+
+        fetch(backend + `/metrics?rain=${rain}`)
+          .then(r=>r.json()).then(m=>{
+            document.getElementById('maxRisk').innerText = m.max_risk.toFixed(3);
+            document.getElementById('meanRisk').innerText = m.mean_risk.toFixed(3);
+            if(m.max_risk > 0.7) showAlert("⚠️ High Rockfall Risk Detected!");
+          });
+      }
+
+      document.getElementById('rain').addEventListener('input', e=>{
+        const v = e.target.value;
+        document.getElementById('rainval').innerText = v + " mm";
+        update(v);
+      });
+
+      function showAlert(msg){
+        if(!document.getElementById('alertbox')){
+          const a = document.createElement('div');
+          a.id = 'alertbox';
+          a.className = 'alert-banner';
+          a.innerText = msg;
+          document.body.appendChild(a);
+          setTimeout(()=>a.remove(), 4000);
+        }
+      }
+
+      update(0);
+    });
+  </script>
+</body>
+</html>
