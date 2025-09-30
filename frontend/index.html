@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Rockfall Risk Detection System</title>
+  <title>GeoSentinal</title>
 
   <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -51,30 +51,40 @@
   <!-- Header -->
   <nav class="navbar navbar-dark bg-dark mb-3">
     <div class="container-fluid">
-      <span class="navbar-brand mb-0 h1">🪨 Rockfall Risk Detection System</span>
+      <span class="navbar-brand mb-0 h1">🪨 GeoSentinal</span>
     </div>
   </nav>
 
   <div class="container-fluid">
     <div class="row">
-      <!-- Left panel: Controls + Metrics -->
-      <div class="col-md-3 mb-3">
-        <div class="card p-3 mb-3">
-          <h5>Rainfall Input (mm)</h5>
-          <input id="rain" type="range" class="form-range" min="0" max="200" value="0" />
-          <span id="rainval">0 mm</span>
-        </div>
-
-        <div class="card p-3">
-          <h5>Risk Metrics</h5>
-          <p>Max Risk: <span id="maxRisk">-</span></p>
-          <p>Mean Risk: <span id="meanRisk">-</span></p>
-        </div>
-      </div>
-
-      <!-- Right panel: Map -->
-      <div class="col-md-9">
+      <!-- Left panel: Map -->
+      <div class="col-md-7">
         <div id="map"></div>
+      </div>
+      
+      <!-- Right panel: Analysis -->
+      <div class="col-md-5">
+        <div class="card p-2 mb-3">
+          <h5>Risk Analysis</h5>
+          <div id="analysis-results">
+            <p>Click on the map to analyze a 5km x 5km area.</p>
+          </div>
+        </div>
+
+        <div class="card p-2 mb-3">
+          <h5>Risk Graph</h5>
+          <canvas id="riskGraph" width="400" height="200"></canvas>
+        </div>
+
+        <div class="card p-2 mb-3">
+          <h5>Dynamic Legend</h5>
+          <ul id="legend" class="list-group">
+            <li class="list-group-item">High Risk: Red</li>
+            <li class="list-group-item">Medium Risk: Orange</li>
+            <li class="list-group-item">Low Risk: Green</li>
+          </ul>
+        </div>
+
       </div>
     </div>
   </div>
@@ -86,51 +96,192 @@
 
   <!-- Scripts -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     const backend = "http://127.0.0.1:5000";
-    let map, overlay;
+    let map, riskChart, selectedAreaPolygon, polygonHeatmapOverlay;
 
     // Initialize map
     fetch(backend + "/bounds").then(r => r.json()).then(b => {
+      console.log('Initializing map with bounds:', b);
       const bounds = [[b.south, b.west], [b.north, b.east]];
       const center = [(b.south + b.north) / 2, (b.west + b.east) / 2];
 
-      map = L.map('map').setView(center, 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19, attribution: '© OpenStreetMap'
-      }).addTo(map);
-
-      function update(rain){
-        const url = backend + `/risk_map.png?rain=${rain}&_=${Date.now()}`;
-        if(overlay) map.removeLayer(overlay);
-        overlay = L.imageOverlay(url, bounds).addTo(map);
-
-        fetch(backend + `/metrics?rain=${rain}`)
-          .then(r=>r.json()).then(m=>{
-            document.getElementById('maxRisk').innerText = m.max_risk.toFixed(3);
-            document.getElementById('meanRisk').innerText = m.mean_risk.toFixed(3);
-            if(m.max_risk > 0.7) showAlert("⚠️ High Rockfall Risk Detected!");
-          });
-      }
-
-      document.getElementById('rain').addEventListener('input', e=>{
-        const v = e.target.value;
-        document.getElementById('rainval').innerText = v + " mm";
-        update(v);
+      map = L.map('map', {
+        center: center,
+        zoom: 13,
+        minZoom: 3,
+        maxZoom: 18
+      });
+      
+      // --- Define different map styles (base layers) ---
+      const streetMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
       });
 
-      function showAlert(msg){
-        if(!document.getElementById('alertbox')){
-          const a = document.createElement('div');
-          a.id = 'alertbox';
-          a.className = 'alert-banner';
-          a.innerText = msg;
-          document.body.appendChild(a);
-          setTimeout(()=>a.remove(), 4000);
+      const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+      });
+
+      // Set the default map style
+      streetMap.addTo(map);
+
+      // --- Add a layer control to switch between map styles ---
+      const baseMaps = {
+          "Street View": streetMap,
+          "Satellite View": satelliteMap
+      };
+      L.control.layers(baseMaps).addTo(map);
+
+      map.on('click', function(e) {
+        const { lat, lng } = e.latlng;
+        console.log(`Location selected: ${lat}, ${lng}`);
+        
+        // Remove previous polygon if it exists
+        if (selectedAreaPolygon) {
+          map.removeLayer(selectedAreaPolygon);
+        }
+        // Remove previous heatmap overlay if it exists
+        if (polygonHeatmapOverlay) {
+          map.removeLayer(polygonHeatmapOverlay);
+        }
+
+        // Calculate a 5km x 5km bounding box
+        // 1 degree of latitude is approx 111.1 km. So 2.5km is ~0.0225 degrees.
+        const lat_offset = 2.5 / 111.1; 
+        // Longitude degrees vary with latitude
+        const lng_offset = 2.5 / (111.1 * Math.cos(lat * Math.PI / 180));
+
+        const polygonCoords = [
+          [lat - lat_offset, lng - lng_offset],
+          [lat - lat_offset, lng + lng_offset],
+          [lat + lat_offset, lng + lng_offset],
+          [lat + lat_offset, lng - lng_offset]
+        ];
+
+        selectedAreaPolygon = L.polygon(polygonCoords, {color: 'cyan'}).addTo(map);
+        
+        // --- Fetch and display the polygon-specific heatmap ---
+        const polygonBounds = selectedAreaPolygon.getBounds();
+        fetch(`${backend}/polygon_heatmap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ coordinates: selectedAreaPolygon.getLatLngs() })
+        })
+        .then(response => {
+          if (!response.ok) throw new Error('Network response was not ok');
+          return response.blob(); // Get the image as a blob
+        })
+        .then(imageBlob => {
+          const imageUrl = URL.createObjectURL(imageBlob);
+          // Create an image overlay with the new heatmap, bounded by the polygon
+          polygonHeatmapOverlay = L.imageOverlay(imageUrl, polygonBounds, {
+            opacity: 0.7,
+            interactive: false
+          }).addTo(map);
+        })
+        .catch(error => console.error('Error fetching polygon heatmap:', error));
+
+        // --- Fetch the numerical metrics for the text display ---
+        fetch(`${backend}/polygon_metrics`, { // This call remains to get the numbers
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ coordinates: selectedAreaPolygon.getLatLngs() })
+        })
+          .then(r => r.json())
+          .then(data => {
+            const resultsDiv = document.getElementById('analysis-results');
+            // Update the risk graph with the new factors
+            loadRiskGraph(data.factors);
+
+            let factorsHtml = '<ul class="list-unstyled small mt-2">';
+            for (const [key, value] of Object.entries(data.factors)) {
+              factorsHtml += `<li>${key}: <strong>${value}</strong></li>`;
+            }
+            factorsHtml += '</ul>';
+
+            resultsDiv.innerHTML = `
+              <div class="d-flex justify-content-around">
+                <p class="mb-0">Max Risk: <span class="fw-bold">${data.max_risk.toFixed(2)}</span></p>
+                <p class="mb-0">Mean Risk: <span class="fw-bold">${data.mean_risk.toFixed(2)}</span></p>
+              </div>
+              <hr class="my-2">
+              ${factorsHtml}
+            `;
+            showAlert(data.explanation);
+          });
+      });
+
+      function updateLegend() {
+        // This function creates a legend based on the colormap from the backend
+        const legend = document.getElementById('legend');
+        legend.innerHTML = ''; // Clear existing legend
+        const levels = { 'High': '#FF0000', 'Medium': '#FFFF00', 'Low': '#008000' }; // Colors from 'jet' map
+        
+        for (const level in levels) {
+            const color = levels[level];
+            const item = `<li class="list-group-item d-flex align-items-center" style="background: #1e1e1e; border: none; color: #f1f1f1; padding: .25rem .5rem;"><div style="width: 20px; height: 20px; background-color: ${color}; margin-right: 10px;"></div>${level} Risk</li>`;
+            legend.innerHTML += item;
         }
       }
 
-      update(0);
+      function showAlert(msg){
+        if(document.getElementById('alertbox')) return; // Don't show multiple alerts
+        const a = document.createElement('div');
+        a.id = 'alertbox';
+        a.className = 'alert-banner';
+        a.innerText = msg;
+        document.body.appendChild(a);
+        setTimeout(()=>a.remove(), 4000);
+      }
+
+      function loadRiskGraph(factors = {}) {
+        const ctx = document.getElementById('riskGraph').getContext('2d');
+
+        fetch(`${backend}/risk_graph`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ factors: factors })
+        })
+          .then(response => {
+            if (!response.ok) throw new Error('Failed to load graph data');
+            return response.json();
+          })
+          .then(graphData => {
+            if (riskChart) riskChart.destroy();
+            riskChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: graphData.timestamps,
+                datasets: [{
+                  label: 'Risk Over Time',
+                  data: graphData.risk_values,
+                  borderColor: 'rgba(255, 99, 132, 1)',
+                  backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                  fill: true
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: {
+                  legend: {
+                    display: true
+                  }
+                }
+              }
+            });
+          });
+      }
+
+      // Load initial components
+      updateLegend();
+      loadRiskGraph(); // Load initial default graph
     });
   </script>
 </body>
