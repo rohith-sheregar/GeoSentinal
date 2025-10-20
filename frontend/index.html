@@ -1,288 +1,202 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GeoSentinal</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoSentinel - Rockfall Risk Visualizer</title>
+    <meta name="description" content="Advanced rockfall risk assessment and visualization platform">
+    <meta name="keywords" content="rockfall, risk assessment, geological monitoring, data visualization">
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="GeoSentinel - Rockfall Risk Visualizer">
+    <meta property="og:description" content="Advanced rockfall risk assessment and visualization platform">
+    
+    <!-- Twitter Meta Tags -->
+    <meta name="twitter:title" content="GeoSentinel - Rockfall Risk Visualizer">
+    <meta name="twitter:description" content="Advanced rockfall risk assessment and visualization platform">
 
-  <!-- Bootstrap 5 -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <!-- External Libraries -->
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+    
+    <!-- Map and Chart Libraries -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+    
+    <!-- Animation and UI Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-  <style>
-    body {
-      background-color: #121212;
-      color: #f1f1f1;
-      font-family: 'Segoe UI', sans-serif;
+    <style type="text/tailwindcss">
+    @layer theme {
+        :root {
+            /* Glassmorphism Colors - Teal/Cyan + Magenta Theme */
+            --primary-color: #06b6d4;
+            --secondary-color: #e879f9;
+            --accent-color: #0891b2;
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --glass-bg: rgba(15, 23, 42, 0.8);
+            --glass-border: rgba(6, 182, 212, 0.2);
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            
+            /* Animation Timings */
+            --animation-fast: 0.2s;
+            --animation-normal: 0.3s;
+            --animation-slow: 0.5s;
+            
+            /* Glassmorphism Effects */
+            --glass-blur: 16px;
+            --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+        }
     }
-    #map {
-      height: 75vh;
-      border-radius: 12px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+
+    @layer base {
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+        
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
     }
-    .card {
-      background: #1e1e1e;
-      border: none;
-      color: #f1f1f1;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+
+    @layer components {
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+            box-shadow: var(--glass-shadow);
+        }
+        
+        .neon-glow {
+            box-shadow: 0 0 20px var(--primary-color), 0 0 40px var(--primary-color);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: white;
+            border: none;
+            border-radius: 0.75rem;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            transition: all var(--animation-normal) ease;
+            cursor: pointer;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(6, 182, 212, 0.4);
+        }
+        
+        .layer-control-pill {
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
+            border-radius: 9999px;
+            padding: 0.5rem;
+            display: flex;
+            gap: 0.25rem;
+        }
+        
+        .layer-control-pill button {
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            background: transparent;
+            color: var(--text-secondary);
+            border: none;
+            transition: all var(--animation-fast) ease;
+            cursor: pointer;
+        }
+        
+        .layer-control-pill button.active {
+            background: var(--primary-color);
+            color: white;
+        }
     }
-    .alert-banner {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 9999;
-      padding: 15px 20px;
-      background: #d32f2f;
-      color: white;
-      font-weight: bold;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.6);
-      animation: slidein 0.4s ease;
+
+    @layer utilities {
+        .animate-slide-up {
+            animation: slideUp var(--animation-normal) ease-out;
+        }
+        
+        .animate-fade-in {
+            animation: fadeIn var(--animation-normal) ease-out;
+        }
+        
+        .animate-bounce-in {
+            animation: bounceIn var(--animation-slow) ease-out;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(2rem); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes shrinkWidth {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+        
+        .alert-slide-in {
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        .alert-progress {
+            animation: shrinkWidth 5s linear;
+        }
     }
-    @keyframes slidein {
-      from { transform: translateY(-50px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-  </style>
+    </style>
 </head>
 <body>
-  <!-- Header -->
-  <nav class="navbar navbar-dark bg-dark mb-3">
-    <div class="container-fluid">
-      <span class="navbar-brand mb-0 h1">🪨 GeoSentinal</span>
-    </div>
-  </nav>
-
-  <div class="container-fluid">
-    <div class="row">
-      <!-- Left panel: Map -->
-      <div class="col-md-7">
-        <div id="map"></div>
-      </div>
-      
-      <!-- Right panel: Analysis -->
-      <div class="col-md-5">
-        <div class="card p-2 mb-3">
-          <h5>Risk Analysis</h5>
-          <div id="analysis-results">
-            <p>Click on the map to analyze a 5km x 5km area.</p>
-          </div>
-        </div>
-
-        <div class="card p-2 mb-3">
-          <h5>Risk Graph</h5>
-          <canvas id="riskGraph" width="400" height="200"></canvas>
-        </div>
-
-        <div class="card p-2 mb-3">
-          <h5>Dynamic Legend</h5>
-          <ul id="legend" class="list-group">
-            <li class="list-group-item">High Risk: Red</li>
-            <li class="list-group-item">Medium Risk: Orange</li>
-            <li class="list-group-item">Low Risk: Green</li>
-          </ul>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <footer class="text-center mt-3 text-muted">
-    <p style="font-size: 0.9em;">Prototype for SIH — Not for operational use</p>
-  </footer>
-
-  <!-- Scripts -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    const backend = "http://127.0.0.1:5000";
-    let map, riskChart, selectedAreaPolygon, polygonHeatmapOverlay;
-
-    // Initialize map
-    fetch(backend + "/bounds").then(r => r.json()).then(b => {
-      console.log('Initializing map with bounds:', b);
-      const bounds = [[b.south, b.west], [b.north, b.east]];
-      const center = [(b.south + b.north) / 2, (b.west + b.east) / 2];
-
-      map = L.map('map', {
-        center: center,
-        zoom: 13,
-        minZoom: 3,
-        maxZoom: 18
-      });
-      
-      // --- Define different map styles (base layers) ---
-      const streetMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 20
-      });
-
-      const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-      });
-
-      // Set the default map style
-      streetMap.addTo(map);
-
-      // --- Add a layer control to switch between map styles ---
-      const baseMaps = {
-          "Street View": streetMap,
-          "Satellite View": satelliteMap
-      };
-      L.control.layers(baseMaps).addTo(map);
-
-      map.on('click', function(e) {
-        const { lat, lng } = e.latlng;
-        console.log(`Location selected: ${lat}, ${lng}`);
-        
-        // Remove previous polygon if it exists
-        if (selectedAreaPolygon) {
-          map.removeLayer(selectedAreaPolygon);
-        }
-        // Remove previous heatmap overlay if it exists
-        if (polygonHeatmapOverlay) {
-          map.removeLayer(polygonHeatmapOverlay);
-        }
-
-        // Calculate a 5km x 5km bounding box
-        // 1 degree of latitude is approx 111.1 km. So 2.5km is ~0.0225 degrees.
-        const lat_offset = 2.5 / 111.1; 
-        // Longitude degrees vary with latitude
-        const lng_offset = 2.5 / (111.1 * Math.cos(lat * Math.PI / 180));
-
-        const polygonCoords = [
-          [lat - lat_offset, lng - lng_offset],
-          [lat - lat_offset, lng + lng_offset],
-          [lat + lat_offset, lng + lng_offset],
-          [lat + lat_offset, lng - lng_offset]
-        ];
-
-        selectedAreaPolygon = L.polygon(polygonCoords, {color: 'cyan'}).addTo(map);
-        
-        // --- Fetch and display the polygon-specific heatmap ---
-        const polygonBounds = selectedAreaPolygon.getBounds();
-        fetch(`${backend}/polygon_heatmap`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ coordinates: selectedAreaPolygon.getLatLngs() })
-        })
-        .then(response => {
-          if (!response.ok) throw new Error('Network response was not ok');
-          return response.blob(); // Get the image as a blob
-        })
-        .then(imageBlob => {
-          const imageUrl = URL.createObjectURL(imageBlob);
-          // Create an image overlay with the new heatmap, bounded by the polygon
-          polygonHeatmapOverlay = L.imageOverlay(imageUrl, polygonBounds, {
-            opacity: 0.7,
-            interactive: false
-          }).addTo(map);
-        })
-        .catch(error => console.error('Error fetching polygon heatmap:', error));
-
-        // --- Fetch the numerical metrics for the text display ---
-        fetch(`${backend}/polygon_metrics`, { // This call remains to get the numbers
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ coordinates: selectedAreaPolygon.getLatLngs() })
-        })
-          .then(r => r.json())
-          .then(data => {
-            const resultsDiv = document.getElementById('analysis-results');
-            // Update the risk graph with the new factors
-            loadRiskGraph(data.factors);
-
-            let factorsHtml = '<ul class="list-unstyled small mt-2">';
-            for (const [key, value] of Object.entries(data.factors)) {
-              factorsHtml += `<li>${key}: <strong>${value}</strong></li>`;
-            }
-            factorsHtml += '</ul>';
-
-            resultsDiv.innerHTML = `
-              <div class="d-flex justify-content-around">
-                <p class="mb-0">Max Risk: <span class="fw-bold">${data.max_risk.toFixed(2)}</span></p>
-                <p class="mb-0">Mean Risk: <span class="fw-bold">${data.mean_risk.toFixed(2)}</span></p>
-              </div>
-              <hr class="my-2">
-              ${factorsHtml}
-            `;
-            showAlert(data.explanation);
-          });
-      });
-
-      function updateLegend() {
-        // This function creates a legend based on the colormap from the backend
-        const legend = document.getElementById('legend');
-        legend.innerHTML = ''; // Clear existing legend
-        const levels = { 'High': '#FF0000', 'Medium': '#FFFF00', 'Low': '#008000' }; // Colors from 'jet' map
-        
-        for (const level in levels) {
-            const color = levels[level];
-            const item = `<li class="list-group-item d-flex align-items-center" style="background: #1e1e1e; border: none; color: #f1f1f1; padding: .25rem .5rem;"><div style="width: 20px; height: 20px; background-color: ${color}; margin-right: 10px;"></div>${level} Risk</li>`;
-            legend.innerHTML += item;
-        }
-      }
-
-      function showAlert(msg){
-        if(document.getElementById('alertbox')) return; // Don't show multiple alerts
-        const a = document.createElement('div');
-        a.id = 'alertbox';
-        a.className = 'alert-banner';
-        a.innerText = msg;
-        document.body.appendChild(a);
-        setTimeout(()=>a.remove(), 4000);
-      }
-
-      function loadRiskGraph(factors = {}) {
-        const ctx = document.getElementById('riskGraph').getContext('2d');
-
-        fetch(`${backend}/risk_graph`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ factors: factors })
-        })
-          .then(response => {
-            if (!response.ok) throw new Error('Failed to load graph data');
-            return response.json();
-          })
-          .then(graphData => {
-            if (riskChart) riskChart.destroy();
-            riskChart = new Chart(ctx, {
-              type: 'line',
-              data: {
-                labels: graphData.timestamps,
-                datasets: [{
-                  label: 'Risk Over Time',
-                  data: graphData.risk_values,
-                  borderColor: 'rgba(255, 99, 132, 1)',
-                  backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                  fill: true
-                }]
-              },
-              options: {
-                responsive: true,
-                plugins: {
-                  legend: {
-                    display: true
-                  }
-                }
-              }
-            });
-          });
-      }
-
-      // Load initial components
-      updateLegend();
-      loadRiskGraph(); // Load initial default graph
-    });
-  </script>
+    <div id="root"></div>
+    
+    <!-- Component Scripts -->
+    <script type="text/babel" src="utils/apiClient.js"></script>
+    <script type="text/babel" src="utils/mapUtils.js"></script>
+    <script type="text/babel" src="components/AlertSystem.js"></script>
+    <script type="text/babel" src="components/RiskChart.js"></script>
+    <script type="text/babel" src="components/AnalysisPanel.js"></script>
+    <script type="text/babel" src="components/MapContainer.js"></script>
+    <script type="text/babel" src="app.js"></script>
 </body>
 </html>
