@@ -5,15 +5,31 @@ import numpy as np
 import io
 from PIL import Image
 from matplotlib import cm
-import matplotlib.pyplot as plt # Added for heatmap generation
+import matplotlib.pyplot as plt
 import os
 import random
+import threading
+import time
+from datetime import datetime, timedelta
 
 from risk import compute_risk, create_polygon_mask
+from ml_model import RockfallPredictor
+from sensor_monitor import SensorMonitor
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='', template_folder='../frontend')
-# CORS is enabled for all origins and methods. The @app.after_request function below is redundant.
-CORS(app, resources={r"/*": {"origins": "*"}}) 
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Initialize components
+predictor = RockfallPredictor()
+from sensor_manager import SensorManager
+sensor_manager = SensorManager()
+
+def alert_handler(alert_data):
+    print(f"Alert received: {alert_data['message']}")
+    # Here you could integrate with SMS/email notification systems
+
+sensor_manager.register_alert_callback(alert_handler)
+sensor_manager.start_monitoring()
 
 THIS_DIR = os.path.dirname(__file__)
 DEM_PATH = os.path.join(THIS_DIR, "dem.npy")
@@ -36,13 +52,56 @@ def home():
     print("Home route accessed")
     return send_from_directory(app.template_folder, 'index.html')
 
+@app.route("/api/sensor-data", methods=['GET'])
+def get_sensor_data():
+    return jsonify(sensor_manager.get_current_readings())
+
+@app.route("/api/historical-data", methods=['GET'])
+def get_historical_data():
+    hours = request.args.get('hours', default=24, type=int)
+    data = sensor_manager.get_historical_data(hours)
+    return jsonify({
+        'data': data,
+        'timestamps': [
+            (datetime.now() - timedelta(hours=i)).strftime('%Y-%m-%d %H:%M:%S')
+            for i in range(hours-1, -1, -1)
+        ]
+    })
+
+@app.route("/api/predict", methods=['POST'])
+def predict_rockfall():
+    try:
+        data = request.json
+        current_sensors = sensor_manager.get_current_readings()
+        
+        # Combine DEM, image, and sensor data for prediction
+        prediction = predictor.predict(
+            data.get('dem_data'),
+            data.get('image_data'),
+            current_sensors
+        )
+        
+        return jsonify({
+            'probability': float(prediction[0]),
+            'timestamp': datetime.now().isoformat(),
+            'sensor_data': current_sensors
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'probability': 0.0,
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
 @app.route("/risk_map.png")
 def risk_map():
-    # Simulate real-time factors for risk calculation
-    rainfall = random.randint(0, 500)  # mm
-    duration = random.randint(1, 24)  # Simulated real-time duration
+    # Get real sensor data
+    sensor_data = sensor_manager.get_current_readings()
+    rainfall = sensor_data.get('rainfall', 0)
+    historical_data = sensor_manager.get_historical_data(24)
+    duration = 24  # Use last 24 hours of data
 
-    print(f"Generating risk map with simulated factors: Rainfall={rainfall}mm, Duration={duration}h")
+    print(f"Generating risk map with real factors: Rainfall={rainfall}mm, Duration={duration}h")
 
     try:
         # --- Dynamic Heatmap Generation ---

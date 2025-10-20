@@ -3,3 +3,17 @@ flask-cors
 numpy
 matplotlib
 pillow
+scikit-image
+tensorflow
+scikit-learn
+pandas
+opencv-python
+rasterio
+geopandas
+joblib
+pyserial  # for sensor data
+paho-mqtt  # for IoT communication
+sendgrid  # for email alerts
+twilio    # for SMS alerts
+requests
+python-dotenv  # for managing environment variables
